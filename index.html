@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Operation Epic Fury — Cost Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #020a04;
+    --bg2: #040d06;
+    --bg3: #071209;
+    --green: #00ff41;
+    --green-dim: #00c832;
+    --green-pale: #00802a;
+    --green-ghost: rgba(0,255,65,0.06);
+    --green-glow: rgba(0,255,65,0.15);
+    --amber: #ffb800;
+    --amber-dim: #cc9200;
+    --red: #ff3b3b;
+    --red-dim: #cc2222;
+    --cyan: #00e5ff;
+    --white: #d4f5d4;
+    --muted: #3a6b3a;
+    --border: rgba(0,255,65,0.12);
+    --border-bright: rgba(0,255,65,0.3);
+    --scanline: rgba(0,0,0,0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--white);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      var(--scanline) 0px,
+      var(--scanline) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0.4;
+  }
+
+  /* Grid noise texture */
+  body::after {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: 
+      radial-gradient(ellipse at 20% 50%, rgba(0,255,65,0.03) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 20%, rgba(0,200,50,0.02) 0%, transparent 40%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* STATUS BAR */
+  .status-bar {
+    background: rgba(0,255,65,0.08);
+    border-bottom: 1px solid var(--border-bright);
+    padding: 8px 24px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+  }
+
+  .status-bar .pulse {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green), 0 0 16px var(--green);
+    animation: pulse 1.5s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--green), 0 0 16px var(--green); }
+    50% { opacity: 0.4; box-shadow: 0 0 4px var(--green); }
+  }
+
+  .status-bar span { color: var(--green); }
+  .status-bar .sep { color: var(--muted); }
+  .status-bar .time-live { color: var(--amber); margin-left: auto; }
+
+  /* MAIN LAYOUT */
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 20px 80px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* HEADER */
+  .header {
+    padding: 48px 0 32px;
+    text-align: center;
+    position: relative;
+  }
+
+  .header-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--green-pale);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .header h1 {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 900;
+    font-size: clamp(22px, 4vw, 38px);
+    letter-spacing: 0.08em;
+    color: var(--green);
+    text-shadow: 0 0 30px rgba(0,255,65,0.4), 0 0 60px rgba(0,255,65,0.15);
+    text-transform: uppercase;
+    line-height: 1.2;
+  }
+
+  .header-sub {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    margin-top: 10px;
+    text-transform: uppercase;
+  }
+
+  .header-line {
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--green-pale), var(--green), var(--green-pale), transparent);
+    margin: 32px 0 0;
+  }
+
+  /* MAIN COST DISPLAY */
+  .cost-panel {
+    border: 1px solid var(--border-bright);
+    background: var(--green-ghost);
+    border-radius: 2px;
+    padding: 36px 40px;
+    margin: 32px 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cost-panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--green), transparent);
+    animation: scan 4s ease-in-out infinite;
+  }
+
+  @keyframes scan {
+    0% { transform: translateX(-100%); opacity: 0; }
+    20% { opacity: 1; }
+    80% { opacity: 1; }
+    100% { transform: translateX(100%); opacity: 0; }
+  }
+
+  .cost-panel-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+
+  .cost-panel-label span { color: var(--amber); }
+
+  .main-cost {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 900;
+    font-size: clamp(32px, 6vw, 64px);
+    color: var(--amber);
+    text-shadow: 0 0 40px rgba(255,184,0,0.5), 0 0 80px rgba(255,184,0,0.2);
+    letter-spacing: 0.02em;
+    line-height: 1;
+    margin-bottom: 16px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cost-range {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .cost-range em { color: var(--green-dim); font-style: normal; }
+
+  .cost-breakdown {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--green-pale);
+    margin-bottom: 24px;
+  }
+
+  .ops-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--green-pale);
+    padding: 4px 12px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--green-dim);
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+
+  .ops-badge::before {
+    content: '◆';
+    font-size: 8px;
+  }
+
+  /* COUNTDOWN TIMER */
+  .timer-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .timer-block {
+    text-align: center;
+  }
+
+  .timer-digit {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--green);
+    background: rgba(0,255,65,0.06);
+    border: 1px solid var(--border-bright);
+    width: 76px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-shadow: 0 0 20px rgba(0,255,65,0.6);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .timer-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-top: 6px;
+  }
+
+  .timer-sep {
+    font-size: 24px;
+    color: var(--green-pale);
+    margin-bottom: 20px;
+  }
+
+  /* RATE BOXES */
+  .rate-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin: 24px 0;
+  }
+
+  .rate-box {
+    border: 1px solid var(--border);
+    background: var(--green-ghost);
+    padding: 16px;
+    text-align: center;
+  }
+
+  .rate-box-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .rate-box-value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--amber);
+    text-shadow: 0 0 20px rgba(255,184,0,0.4);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rate-box-sub {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* SHARE BUTTONS */
+  .action-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .btn {
+    border: 1px solid var(--green-pale);
+    background: transparent;
+    color: var(--green-dim);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    padding: 10px 20px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn:hover {
+    background: var(--green-ghost);
+    border-color: var(--green);
+    color: var(--green);
+    box-shadow: 0 0 16px rgba(0,255,65,0.15);
+  }
+
+  /* ALERT BOX */
+  .alert-box {
+    border: 1px solid rgba(255,184,0,0.3);
+    background: rgba(255,184,0,0.04);
+    padding: 16px 20px;
+    margin: 0 0 24px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .alert-icon {
+    color: var(--amber);
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .alert-date {
+    color: var(--amber-dim);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+
+  .alert-text {
+    color: var(--white);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  /* SECTION HEADERS */
+  .section-header {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--green-pale);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+    margin: 40px 0 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .section-header::before {
+    content: '//';
+    color: var(--green-dim);
+  }
+
+  /* BURN RATE */
+  .burn-bar {
+    height: 12px;
+    display: flex;
+    margin-bottom: 20px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+
+  .burn-segment {
+    height: 100%;
+    transition: width 0.5s;
+  }
+
+  .burn-legend {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px 24px;
+    margin-bottom: 20px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+  }
+
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .legend-label { color: var(--white); }
+  .legend-val { color: var(--amber); margin-left: auto; }
+
+  .burn-total {
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .burn-total-val {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 22px;
+    color: var(--amber);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* FORCE TABLE */
+  .tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tab {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 10px 20px;
+    cursor: pointer;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all 0.2s;
+  }
+
+  .tab.active {
+    color: var(--green);
+    border-bottom-color: var(--green);
+  }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .force-row {
+    display: flex;
+    align-items: center;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+    gap: 16px;
+  }
+
+  .force-icon { font-size: 16px; color: var(--green-pale); flex-shrink: 0; }
+
+  .force-name {
+    font-weight: 500;
+    color: var(--white);
+    font-size: 12px;
+  }
+
+  .force-class {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .force-qty {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    color: var(--green-dim);
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .force-cost {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    color: var(--amber);
+    text-align: right;
+    flex-shrink: 0;
+    min-width: 200px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* TIMELINE */
+  .timeline { position: relative; }
+
+  .timeline-entry {
+    display: grid;
+    grid-template-columns: 130px 1fr 160px;
+    gap: 16px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: start;
+  }
+
+  .tl-time {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--green-pale);
+    letter-spacing: 0.05em;
+    padding-top: 2px;
+  }
+
+  .tl-title {
+    font-weight: 500;
+    color: var(--white);
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+
+  .tl-desc {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .tl-cost {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    color: var(--amber);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tl-cost.na { color: var(--muted); font-size: 11px; font-family: 'Share Tech Mono', monospace; }
+
+  /* MUNITIONS TABLE */
+  .table-grid {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .table-grid th {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-bright);
+  }
+
+  .table-grid td {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+
+  .table-grid tr:hover td { background: var(--green-ghost); }
+
+  .td-name { color: var(--white); font-weight: 500; }
+  .td-sub { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--muted); }
+  .td-repl { color: var(--amber-dim); font-size: 10px; }
+  .td-qty { color: var(--green-dim); font-family: 'Orbitron', sans-serif; font-size: 12px; text-align: right; }
+  .td-cost { color: var(--amber); font-family: 'Orbitron', sans-serif; font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .table-total {
+    background: rgba(0,255,65,0.04);
+  }
+
+  .table-total td {
+    border-top: 1px solid var(--green-pale);
+    font-weight: 600;
+    color: var(--green);
+  }
+
+  /* MARKET IMPACT */
+  .market-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  @media (min-width: 640px) {
+    .market-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+
+  .market-card {
+    border: 1px solid var(--border);
+    background: var(--green-ghost);
+    padding: 14px 16px;
+  }
+
+  .market-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .market-value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--cyan);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .market-change {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    margin-top: 4px;
+  }
+
+  .market-change.up { color: #ff4444; }
+  .market-change.down { color: var(--green-dim); }
+
+  .market-card.suspended {
+    border-color: rgba(255,59,59,0.3);
+    background: rgba(255,59,59,0.04);
+  }
+
+  .market-card.suspended .market-value {
+    color: var(--red);
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .market-card.suspended .market-change { color: var(--muted); }
+
+  .market-updated {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    text-align: right;
+    margin-top: 8px;
+  }
+
+  /* BROADER COSTS */
+  .broad-entry {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 20px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: start;
+  }
+
+  .broad-name {
+    font-weight: 500;
+    color: var(--white);
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+
+  .broad-desc {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .broad-val {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    color: var(--amber);
+    text-align: right;
+    min-width: 180px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* COMPARISON */
+  .comparison-box {
+    border: 1px solid var(--border);
+    background: var(--green-ghost);
+    padding: 24px 28px;
+    margin: 32px 0;
+  }
+
+  .comparison-box h3 {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--green-pale);
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+
+  .comp-item {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .comp-item strong { color: var(--green); }
+  .comp-item span { color: var(--amber); }
+
+  /* METHODOLOGY */
+  .method-box {
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    padding: 24px 28px;
+    margin: 32px 0;
+  }
+
+  .method-box h3 {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--green-pale);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .method-box p {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.7;
+    margin-bottom: 12px;
+  }
+
+  .method-box strong { color: var(--white); }
+
+  /* FOOTER */
+  .footer {
+    text-align: center;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    padding: 32px 0;
+    border-top: 1px solid var(--border);
+    letter-spacing: 0.1em;
+  }
+
+  /* RESPONSIVE */
+  @media (max-width: 700px) {
+    .cost-panel { padding: 24px 20px; }
+    .timeline-entry { grid-template-columns: 1fr; gap: 4px; }
+    .tl-cost { text-align: left; }
+    .broad-entry { grid-template-columns: 1fr; }
+    .broad-val { text-align: left; }
+    .rate-grid { grid-template-columns: 1fr; }
+    .burn-legend { grid-template-columns: 1fr; }
+    .force-cost { min-width: auto; }
+  }
+
+  /* GLITCH ANIMATION for main number */
+  @keyframes glitch {
+    0%, 95%, 100% { text-shadow: 0 0 40px rgba(255,184,0,0.5), 0 0 80px rgba(255,184,0,0.2); }
+    96% { text-shadow: -2px 0 rgba(255,59,59,0.8), 2px 0 rgba(0,255,65,0.8), 0 0 40px rgba(255,184,0,0.5); }
+    97% { text-shadow: 2px 0 rgba(255,59,59,0.8), -2px 0 rgba(0,255,65,0.8), 0 0 40px rgba(255,184,0,0.5); }
+    98% { text-shadow: 0 0 40px rgba(255,184,0,0.5), 0 0 80px rgba(255,184,0,0.2); }
+  }
+
+  .main-cost { animation: glitch 8s ease-in-out infinite; }
+</style>
+</head>
+<body>
+
+<!-- STATUS BAR -->
+<div class="status-bar">
+  <div class="pulse"></div>
+  <span>LIVE DATA STREAM</span>
+  <span class="sep">·</span>
+  <span>OPERATION EPIC FURY</span>
+  <span class="sep">·</span>
+  <span>INITIATED: FEB 28, 2026 04:00 UTC</span>
+  <span class="time-live" id="live-clock">--:--:-- UTC</span>
+</div>
+
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-label">Classified Intelligence Assessment · U.S. Taxpayer Expenditure</div>
+    <h1>Iran War<br>Cost Tracker</h1>
+    <div class="header-sub">Operation Epic Fury // Real-time Cost Intelligence</div>
+    <div class="header-line"></div>
+  </div>
+
+  <!-- MAIN COST PANEL -->
+  <div class="cost-panel">
+    <div class="cost-panel-label">OPERATION EPIC FURY — <span>EST. U.S. COST SINCE STRIKES BEGAN</span></div>
+    <div class="main-cost" id="main-cost">$0</div>
+    <div class="cost-range">
+      range: <em id="range-low">$0</em> — <em id="range-high">$0</em> &nbsp;|&nbsp; discrete events: <em>$920,600,000</em>
+    </div>
+    <div class="cost-breakdown" id="cost-breakdown">ops: $0 + events: $920,600,000</div>
+    <div class="ops-badge">SUSTAINED OPERATIONS &nbsp;·&nbsp; ~$220,000,000/day</div>
+    
+    <!-- TIMER -->
+    <div class="timer-row">
+      <div class="timer-block">
+        <div class="timer-digit" id="t-days">00</div>
+        <div class="timer-label">Days</div>
+      </div>
+      <div class="timer-sep">:</div>
+      <div class="timer-block">
+        <div class="timer-digit" id="t-hrs">00</div>
+        <div class="timer-label">Hrs</div>
+      </div>
+      <div class="timer-sep">:</div>
+      <div class="timer-block">
+        <div class="timer-digit" id="t-min">00</div>
+        <div class="timer-label">Min</div>
+      </div>
+      <div class="timer-sep">:</div>
+      <div class="timer-block">
+        <div class="timer-digit" id="t-sec">00</div>
+        <div class="timer-label">Sec</div>
+      </div>
+    </div>
+
+    <div class="action-row">
+      <button class="btn" onclick="shareUrl()">⬆ SHARE</button>
+      <button class="btn" onclick="copyUrl()">⧉ COPY LINK</button>
+    </div>
+  </div>
+
+  <!-- RATE GRID -->
+  <div class="rate-grid">
+    <div class="rate-box">
+      <div class="rate-box-label">Per Second</div>
+      <div class="rate-box-value">$2,546</div>
+      <div class="rate-box-sub">Sustained Ops</div>
+    </div>
+    <div class="rate-box">
+      <div class="rate-box-label">Per Hour</div>
+      <div class="rate-box-value">$9,166,667</div>
+      <div class="rate-box-sub">Sustained Ops</div>
+    </div>
+    <div class="rate-box">
+      <div class="rate-box-label">Per Day</div>
+      <div class="rate-box-value">$220,000,000</div>
+      <div class="rate-box-sub">Sustained Ops</div>
+    </div>
+  </div>
+
+  <!-- RECENT UPDATE -->
+  <div class="alert-box">
+    <div class="alert-icon">⚠</div>
+    <div>
+      <div class="alert-date">UPDATE · 2026-03-04</div>
+      <div class="alert-text">Added: US Navy destroys 17 Iranian warships — $30.6M in strike costs, 23 Harpoon/NSM missiles expended. Total Iranian naval losses now 26 ships.</div>
+    </div>
+  </div>
+
+  <!-- BURN RATE -->
+  <div class="section-header">Daily Burn Rate Breakdown — Sustained Operations</div>
+
+  <div class="burn-bar">
+    <div class="burn-segment" style="width:18.2%;background:#ff3b3b;"></div>
+    <div class="burn-segment" style="width:10%;background:#ffb800;"></div>
+    <div class="burn-segment" style="width:21.8%;background:#00c832;"></div>
+    <div class="burn-segment" style="width:6.8%;background:#00e5ff;"></div>
+    <div class="burn-segment" style="width:15.9%;background:#a855f7;"></div>
+    <div class="burn-segment" style="width:4.5%;background:#ec4899;"></div>
+    <div class="burn-segment" style="width:22.8%;background:#6b7280;"></div>
+  </div>
+
+  <div class="burn-legend">
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#ff3b3b;"></div>
+      <span class="legend-label">Personnel (~50,000 deployed)</span>
+      <span class="legend-val">$40,000,000</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#ffb800;"></div>
+      <span class="legend-label">Naval forces (2 CSGs, 7 DDGs, 6 LCS)</span>
+      <span class="legend-val">$22,000,000</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#00c832;"></div>
+      <span class="legend-label">Aircraft operations (13 types)</span>
+      <span class="legend-val">$48,000,000</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#00e5ff;"></div>
+      <span class="legend-label">Fuel &amp; logistics</span>
+      <span class="legend-val">$15,000,000</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#a855f7;"></div>
+      <span class="legend-label">Non-tracked ordnance</span>
+      <span class="legend-val">$35,000,000</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#ec4899;"></div>
+      <span class="legend-label">C4ISR / cyber / space</span>
+      <span class="legend-val">$10,000,000</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#6b7280;"></div>
+      <span class="legend-label">Overhead &amp; unmodeled costs</span>
+      <span class="legend-val">$50,000,000</span>
+    </div>
+  </div>
+
+  <div class="burn-total">
+    <span>Total Daily Operational Cost</span>
+    <span class="burn-total-val">$220,000,000/day</span>
+  </div>
+
+  <!-- DEPLOYED FORCES -->
+  <div class="section-header">Deployed Forces — Operating Costs</div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('naval',this)">Naval</div>
+    <div class="tab" onclick="switchTab('aircraft',this)">Aircraft</div>
+  </div>
+
+  <div class="tab-content active" id="tab-naval">
+    <div class="force-row">
+      <div class="force-icon">⚓</div>
+      <div>
+        <div class="force-name">Aircraft Carrier Strike Group</div>
+        <div class="force-class">Nimitz / Ford-class</div>
+      </div>
+      <div class="force-qty">×2</div>
+      <div class="force-cost">$6,500,000–$8,700,000/day each</div>
+    </div>
+    <div class="force-row">
+      <div class="force-icon">⚓</div>
+      <div>
+        <div class="force-name">Guided-Missile Destroyer (DDG)</div>
+        <div class="force-class">Arleigh Burke-class</div>
+      </div>
+      <div class="force-qty">×7</div>
+      <div class="force-cost">$222,000/day each</div>
+    </div>
+    <div class="force-row">
+      <div class="force-icon">⚓</div>
+      <div>
+        <div class="force-name">Littoral Combat Ship (LCS)</div>
+        <div class="force-class">Freedom / Independence-class</div>
+      </div>
+      <div class="force-qty">×6</div>
+      <div class="force-cost">$192,000–$438,356/day each</div>
+    </div>
+    <div class="burn-total" style="margin-top:16px;">
+      <span>Est. Naval Daily Cost</span>
+      <span class="burn-total-val" style="font-size:16px;">$15,706,000–$21,584,136/day</span>
+    </div>
+    <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);margin-top:8px;">
+      USS Abraham Lincoln (CSG-3, Arabian Sea) + USS Gerald R. Ford (CSG-12, Eastern Med)
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-aircraft">
+    <div class="force-row">
+      <div class="force-icon">✈</div>
+      <div>
+        <div class="force-name">F/A-18E/F Super Hornet</div>
+        <div class="force-class">Carrier-based strike fighter</div>
+      </div>
+      <div class="force-qty">×24</div>
+      <div class="force-cost">~$11,000/flight hr</div>
+    </div>
+    <div class="force-row">
+      <div class="force-icon">✈</div>
+      <div>
+        <div class="force-name">B-2 Spirit</div>
+        <div class="force-class">Strategic stealth bomber</div>
+      </div>
+      <div class="force-qty">×4</div>
+      <div class="force-cost">~$150,000/flight hr</div>
+    </div>
+    <div class="force-row">
+      <div class="force-icon">✈</div>
+      <div>
+        <div class="force-name">B-1B Lancer</div>
+        <div class="force-class">Strategic bomber</div>
+      </div>
+      <div class="force-qty">×3</div>
+      <div class="force-cost">~$63,000/flight hr</div>
+    </div>
+    <div class="force-row">
+      <div class="force-icon">✈</div>
+      <div>
+        <div class="force-name">F-35A/C Lightning II</div>
+        <div class="force-class">Multirole stealth fighter</div>
+      </div>
+      <div class="force-qty">×18</div>
+      <div class="force-cost">~$36,000/flight hr</div>
+    </div>
+    <div class="burn-total" style="margin-top:16px;">
+      <span>Est. Aircraft Daily Cost</span>
+      <span class="burn-total-val" style="font-size:16px;">$30,000,000–$70,000,000/day</span>
+    </div>
+  </div>
+
+  <!-- TIMELINE -->
+  <div class="section-header">Operation Timeline &amp; Discrete Costs</div>
+
+  <div class="timeline">
+    <div class="timeline-entry">
+      <div class="tl-time">02-28 04:00</div>
+      <div>
+        <div class="tl-title">Operation Epic Fury begins</div>
+        <div class="tl-desc">First wave: Tomahawk + JASSM-ER strikes on air defenses, C2 nodes. 1,000+ targets struck Day 1.</div>
+      </div>
+      <div class="tl-cost na">—</div>
+    </div>
+    <div class="timeline-entry">
+      <div class="tl-time">02-28 04:30</div>
+      <div>
+        <div class="tl-title">Cyber/Space operations — 'first movers'</div>
+        <div class="tl-desc">Coordinated cyber and space operations degrading Iranian C3 capabilities.</div>
+      </div>
+      <div class="tl-cost na">—</div>
+    </div>
+    <div class="timeline-entry">
+      <div class="tl-time">02-28 06:30</div>
+      <div>
+        <div class="tl-title">3 U.S. aircraft lost to friendly fire from Kuwait</div>
+        <div class="tl-desc">~$90M per airframe — likely F-15E or F/A-18E/F class; shot down by Kuwaiti air defenses in apparent misidentification.</div>
+      </div>
+      <div class="tl-cost">$270,000,000</div>
+    </div>
+    <div class="timeline-entry">
+      <div class="tl-time">02-28 08:00</div>
+      <div>
+        <div class="tl-title">First Tomahawk salvo — est. 120+ missiles</div>
+        <div class="tl-desc">120 Tomahawk Block V at ~$2.0M each (replacement cost: $1.75M–$2.2M per RTX contract).</div>
+      </div>
+      <div class="tl-cost">$240,000,000</div>
+    </div>
+    <div class="timeline-entry">
+      <div class="tl-time">02-28 12:00</div>
+      <div>
+        <div class="tl-title">JASSM-ER strikes on hardened targets</div>
+        <div class="tl-desc">Est. 60 JASSM-ER at ~$1.5M each.</div>
+      </div>
+      <div class="tl-cost">$90,000,000</div>
+    </div>
+    <div class="timeline-entry">
+      <div class="tl-time">03-01 02:00</div>
+      <div>
+        <div class="tl-title">Second wave strikes — DEAD/SEAD operations</div>
+        <div class="tl-desc">Suppression of enemy air defenses, follow-on Tomahawk strikes (~100 additional).</div>
+      </div>
+      <div class="tl-cost">$180,000,000</div>
+    </div>
+    <div class="timeline-entry">
+      <div class="tl-time">03-01 14:00</div>
+      <div>
+        <div class="tl-title">GBU-57 MOP strikes on Fordow enrichment facility</div>
+        <div class="tl-desc">Est. 8 GBU-57 Massive Ordnance Penetrators at ~$3.5M each, delivered by B-2 Spirit ($150K/flight hr × 30 hrs per sortie).</div>
+      </div>
+      <div class="tl-cost">$28,000,000</div>
+    </div>
+    <div class="timeline-entry">
+      <div class="tl-time">03-01 18:00</div>
+      <div>
+        <div class="tl-title">Naval strikes on Iranian forces — 9 vessels hit</div>
+        <div class="tl-desc">Anti-ship missile strikes expending 30–50 Harpoon ($1.5M ea) and NSM ($2.2M ea) to neutralize 9 Iranian vessels.</div>
+      </div>
+      <div class="tl-cost">$75,000,000</div>
+    </div>
+    <div class="timeline-entry">
+      <div class="tl-time">03-02 20:00</div>
+      <div>
+        <div class="tl-title">LUCAS drone first combat deployment</div>
+        <div class="tl-desc">Autonomous combat drones used in strikes against Iran — first operational appearance. Per-unit costs classified.</div>
+      </div>
+      <div class="tl-cost na">—</div>
+    </div>
+    <div class="timeline-entry">
+      <div class="tl-time">03-03 03:20</div>
+      <div>
+        <div class="tl-title">B-1B Lancers deployed to theater</div>
+        <div class="tl-desc">3 B-1B Lancers transit from CONUS. Flight costs captured in daily aircraft ops rate.</div>
+      </div>
+      <div class="tl-cost na">—</div>
+    </div>
+    <div class="timeline-entry">
+      <div class="tl-time">03-03 20:00</div>
+      <div>
+        <div class="tl-title">B-1B Lancers conduct deep strikes in Iran</div>
+        <div class="tl-desc">3 B-1B Lancers strike deep targets. Ordnance: est. 72 GBU-31 JDAMs (24/aircraft × $25K–$1.8M).</div>
+      </div>
+      <div class="tl-cost">$7,000,000</div>
+    </div>
+  </div>
+
+  <!-- MUNITIONS TABLE -->
+  <div class="section-header">Estimated Munitions &amp; Equipment Costs</div>
+
+  <table class="table-grid">
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th style="text-align:right">Qty</th>
+        <th style="text-align:right">Est. Cost</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <div class="td-name">Tomahawk Block V</div>
+          <div class="td-sub">$2,000,000 ea. <span class="td-repl">(repl: $2,200,000)</span></div>
+        </td>
+        <td class="td-qty">220</td>
+        <td class="td-cost">$440,000,000</td>
+      </tr>
+      <tr>
+        <td>
+          <div class="td-name">JASSM-ER</div>
+          <div class="td-sub">$1,500,000 ea. <span class="td-repl">(repl: $1,700,000)</span></div>
+        </td>
+        <td class="td-qty">60</td>
+        <td class="td-cost">$90,000,000</td>
+      </tr>
+      <tr>
+        <td>
+          <div class="td-name">GBU-57 MOP</div>
+          <div class="td-sub">$3,500,000 ea. <span class="td-repl">(repl: $4,000,000)</span></div>
+        </td>
+        <td class="td-qty">8</td>
+        <td class="td-cost">$28,000,000</td>
+      </tr>
+      <tr>
+        <td>
+          <div class="td-name">GBU-31 JDAM</div>
+          <div class="td-sub">$25,000 ea. <span class="td-repl">(repl: $30,000)</span></div>
+        </td>
+        <td class="td-qty">400</td>
+        <td class="td-cost">$10,000,000</td>
+      </tr>
+      <tr>
+        <td>
+          <div class="td-name">AGM-88 HARM</div>
+          <div class="td-sub">$870,000 ea. <span class="td-repl">(repl: $950,000)</span></div>
+        </td>
+        <td class="td-qty">45</td>
+        <td class="td-cost">$39,150,000</td>
+      </tr>
+      <tr>
+        <td>
+          <div class="td-name">AIM-120 AMRAAM</div>
+          <div class="td-sub">$1,100,000 ea. <span class="td-repl">(repl: $1,200,000)</span></div>
+        </td>
+        <td class="td-qty">30</td>
+        <td class="td-cost">$33,000,000</td>
+      </tr>
+      <tr>
+        <td>
+          <div class="td-name">Aircraft lost (airframe)</div>
+          <div class="td-sub">$90,000,000 ea.</div>
+        </td>
+        <td class="td-qty">3</td>
+        <td class="td-cost">$270,000,000</td>
+      </tr>
+      <tr>
+        <td>
+          <div class="td-name">Harpoon / NSM (anti-ship)</div>
+          <div class="td-sub">$1,800,000 ea. <span class="td-repl">(repl: $2,000,000)</span></div>
+        </td>
+        <td class="td-qty">23</td>
+        <td class="td-cost">$41,400,000</td>
+      </tr>
+      <tr class="table-total">
+        <td colspan="2" style="color:var(--green);font-weight:600;">TOTAL</td>
+        <td class="td-cost" style="color:var(--amber);">$951,550,000</td>
+      </tr>
+      <tr class="table-total">
+        <td colspan="2" style="color:var(--muted);font-size:11px;">REPL. COST</td>
+        <td class="td-cost" style="color:var(--amber-dim);">$1,024,750,000</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- MARKET IMPACT -->
+  <div class="section-header">Market Impact <span style="color:var(--green);font-size:10px;margin-left:8px;">● LIVE</span></div>
+
+  <div class="market-grid">
+    <div class="market-card">
+      <div class="market-label">Brent Crude Oil</div>
+      <div class="market-value">$81.20/bbl</div>
+      <div class="market-change up">+8.72 (+12.03%)</div>
+    </div>
+    <div class="market-card">
+      <div class="market-label">WTI Crude Oil</div>
+      <div class="market-value">$74.01/bbl</div>
+      <div class="market-change up">+6.99 (+10.43%)</div>
+    </div>
+    <div class="market-card">
+      <div class="market-label">Gold</div>
+      <div class="market-value">$5,197.20/oz</div>
+      <div class="market-change down">-33.30 (-0.64%)</div>
+    </div>
+    <div class="market-card">
+      <div class="market-label">S&amp;P 500</div>
+      <div class="market-value">6,816.63</div>
+      <div class="market-change up">-73.44 (-1.07%)</div>
+    </div>
+    <div class="market-card">
+      <div class="market-label">Dow Jones</div>
+      <div class="market-value">48,501.27</div>
+      <div class="market-change up">-673.23 (-1.37%)</div>
+    </div>
+    <div class="market-card">
+      <div class="market-label">Nasdaq</div>
+      <div class="market-value">22,516.69</div>
+      <div class="market-change up">-346.99 (-1.52%)</div>
+    </div>
+    <div class="market-card">
+      <div class="market-label">VIX (Fear Index)</div>
+      <div class="market-value">22.45</div>
+      <div class="market-change up">+2.90 (+14.83%)</div>
+    </div>
+    <div class="market-card suspended">
+      <div class="market-label">Strait of Hormuz</div>
+      <div class="market-value">SUSPENDED</div>
+      <div class="market-change">~20% global oil transit</div>
+    </div>
+  </div>
+  <div class="market-updated">● Updated 7:20:12 PM</div>
+
+  <!-- BROADER COSTS -->
+  <div class="section-header">Broader U.S. Costs — Iran &amp; Proxy Conflicts</div>
+
+  <div class="broad-entry">
+    <div>
+      <div class="broad-name">Personnel deployment (~50,000 troops)</div>
+      <div class="broad-desc">Fully burdened cost $500–$1,200/day per service member across CENTCOM AOE: Kuwait 13,500, Qatar 10,000, Bahrain 8,300, Jordan 4,000, 2 CSGs 13,400, plus surge forces.</div>
+    </div>
+    <div class="broad-val">$40,000,000/day</div>
+  </div>
+  <div class="broad-entry">
+    <div>
+      <div class="broad-name">Naval + aircraft operations</div>
+      <div class="broad-desc">Combined: 2 CSGs ($13M–$17.4M), 7 DDGs ($1.6M), 6 LCS ($1.2M–$2.6M), 13 aircraft types ($30M–$70M). Full O&S basis.</div>
+    </div>
+    <div class="broad-val">~$70,000,000/day</div>
+  </div>
+  <div class="broad-entry">
+    <div>
+      <div class="broad-name">3 U.S. aircraft lost (friendly fire from Kuwait)</div>
+      <div class="broad-desc">$90,000,000 per airframe — Feb 28, 2026; Kuwaiti air defense misidentification.</div>
+    </div>
+    <div class="broad-val">$270,000,000</div>
+  </div>
+  <div class="broad-entry">
+    <div>
+      <div class="broad-name">First 24 hours total expenditure</div>
+      <div class="broad-desc">Anadolou Agency / Al Jazeera estimate of first 24 hrs. Captures only discrete/observable costs. Model adds ~$380M/day operational burn on top.</div>
+    </div>
+    <div class="broad-val">$779,000,000</div>
+  </div>
+  <div class="broad-entry">
+    <div>
+      <div class="broad-name">Munitions replenishment premium</div>
+      <div class="broad-desc">Gap between unit cost paid and replacement production cost. Tomahawk production scaling from ~100/yr to 1,000+/yr. JASSM-ER backlog 18–24 months.</div>
+    </div>
+    <div class="broad-val">$50M–$100M+</div>
+  </div>
+  <div class="broad-entry">
+    <div>
+      <div class="broad-name">Operation timeline extension</div>
+      <div class="broad-desc">At current ~$220M/day rate, 4–5 week duration suggests $6.2B–$7.7B total cost projection.</div>
+    </div>
+    <div class="broad-val" style="font-family:'Orbitron',sans-serif;color:var(--green);">4–5 WEEKS EST.</div>
+  </div>
+  <div class="broad-entry">
+    <div>
+      <div class="broad-name">Est. munitions expended (first 72 hrs)</div>
+      <div class="broad-desc">Tomahawks, JASSMs, JDAMs, MOPs, air-to-air. Replacement cost includes surge production premium.</div>
+    </div>
+    <div class="broad-val">$951,550,000<br><span style="font-size:11px;color:var(--muted)">(repl: $1,024,750,000)</span></div>
+  </div>
+
+  <!-- FOR COMPARISON -->
+  <div class="comparison-box">
+    <h3>// For Comparison</h3>
+    <div class="comp-item"><strong>Post-9/11 Wars:</strong> <span>$8,000,000,000,000</span> over 20 years (~$300,000,000/day avg.)</div>
+    <div class="comp-item"><strong>3 aircraft lost to friendly fire (Feb 28):</strong> <span>$270,000,000</span> — equiv. to 3,375 teacher salaries for a year</div>
+    <div class="comp-item"><strong>Iraq War avg. oil price:</strong> ~$72/bbl (approx. <span>$100+</span> in 2026 dollars)</div>
+    <div class="comp-item"><strong>Iran-Iraq War (1980–88):</strong> <span>$622,000,000,000</span> total (est. 9 years of Iran's GDP)</div>
+    <div class="comp-item"><strong>U.S. national debt interest:</strong> <span>$1,000,000,000,000</span> projected for 2026 alone</div>
+    <div class="comp-item" style="border:0;">Every <span>$1,000,000</span> in military spending creates ~5 jobs. The same creates ~13 in education, ~9 in healthcare.</div>
+  </div>
+
+  <!-- METHODOLOGY -->
+  <div class="method-box">
+    <h3>// Methodology &amp; Sources</h3>
+    <p>Running estimate uses a <strong>three-phase bottom-up cost model</strong>: ~$380,000,000/day for initial strikes (Days 0–3), ~$220,000,000/day for sustained operations (Days 3–10), ~$155,000,000/day for air dominance/ISR-heavy phase (Day 10+). Each phase is built from seven sourced components.</p>
+    <p><strong>Not included:</strong> Long-term veteran healthcare (historically 2–4× direct war costs over decades), economic opportunity costs, indirect costs from energy market disruption, allied nation expenditures, or environmental remediation.</p>
+    <p><strong>Sources:</strong> DoD Comptroller FY2024/25 · CBO · GAO · TRANSCOM · Defense News · Brown Univ. Costs of War Project · DLA Energy · Stimson Center · SIPRI · RTX production data · Yahoo Finance</p>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  COST INTELLIGENCE TRACKER · OPERATION EPIC FURY · DATA LAST UPDATED 2026-03-04<br>
+  Estimates are based on open-source data. Not affiliated with DoD or U.S. Government.
+</div>
+
+<script>
+  // START TIME: Feb 28, 2026 04:00 UTC
+  const START = new Date('2026-02-28T04:00:00Z').getTime();
+  const EVENTS_COST = 920600000;
+  const DAILY_RATE = 220000000;
+  const PER_SEC = DAILY_RATE / 86400;
+
+  function fmt(n) {
+    return '$' + Math.round(n).toLocaleString('en-US');
+  }
+
+  function pad(n) {
+    return String(n).padStart(2, '0');
+  }
+
+  function tick() {
+    const now = Date.now();
+    const elapsed = Math.max(0, now - START);
+    const elSec = elapsed / 1000;
+
+    // Timer
+    const days = Math.floor(elSec / 86400);
+    const hrs  = Math.floor((elSec % 86400) / 3600);
+    const mins = Math.floor((elSec % 3600) / 60);
+    const secs = Math.floor(elSec % 60);
+
+    document.getElementById('t-days').textContent = pad(days);
+    document.getElementById('t-hrs').textContent  = pad(hrs);
+    document.getElementById('t-min').textContent  = pad(mins);
+    document.getElementById('t-sec').textContent  = pad(secs);
+
+    // Cost
+    const opsTotal = elSec * PER_SEC;
+    const total = opsTotal + EVENTS_COST;
+    const low   = total * 0.83;
+    const high  = total * 1.235;
+
+    document.getElementById('main-cost').textContent = fmt(total);
+    document.getElementById('range-low').textContent = fmt(low);
+    document.getElementById('range-high').textContent = fmt(high);
+    document.getElementById('cost-breakdown').textContent =
+      'ops: ' + fmt(opsTotal) + ' + events: $920,600,000';
+
+    // Live clock
+    const d = new Date(now);
+    const hh = pad(d.getUTCHours());
+    const mm = pad(d.getUTCMinutes());
+    const ss = pad(d.getUTCSeconds());
+    document.getElementById('live-clock').textContent = hh + ':' + mm + ':' + ss + ' UTC';
+  }
+
+  tick();
+  setInterval(tick, 1000);
+
+  // Tabs
+  function switchTab(id, el) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('tab-' + id).classList.add('active');
+  }
+
+  // Share / Copy
+  function shareUrl() {
+    if (navigator.share) {
+      navigator.share({ title: 'Iran War Cost Tracker', url: location.href });
+    } else {
+      copyUrl();
+    }
+  }
+
+  function copyUrl() {
+    navigator.clipboard.writeText(location.href).then(() => {
+      alert('Link copied!');
+    });
+  }
+</script>
+</body>
+</html>
